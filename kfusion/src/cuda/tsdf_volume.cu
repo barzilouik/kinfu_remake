@@ -127,11 +127,12 @@ namespace kfusion
 					float tsdf_new = __fdividef(__fmaf_rn(tsdf_prev, (float)weight_prev, tsdf * (float)weight_new), (float)weight_prev + weight_new);
 
 					//pack and write
-					gmem::StCs(pack_tsdf (tsdf_new*1000.f, weight_new), vptr);
+					ushort2 pp = pack_tsdf (tsdf_new, weight_new);
+					gmem::StCs(pp, vptr);
 
-					tsdf_prev = unpack_tsdf (gmem::LdCs(vptr), weight_prev)*0.001f;
-					if (sdf > 0 && sdf < 1)
-						printf("%f, %f(%f) = %f\n", tsdf_prev, tsdf,sdf, tsdf_new);
+					tsdf_prev = unpack_tsdf (gmem::LdCs(vptr), weight_prev);
+//					if (sdf > -1 && sdf < 1)
+//						printf("%hu, %f, %f(%f) = %f\n", pp.x, tsdf_prev, tsdf,sdf, tsdf_new);
 
                 }  // for(;;)
             }
