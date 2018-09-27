@@ -1,3 +1,5 @@
+#include <opencv2/highgui.hpp>
+
 #include "precomp.hpp"
 #include "internal.hpp"
 
@@ -220,6 +222,14 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
 #endif
         cuda::waitAllDefaultStream();
     }
+
+    Normals d = curr_.normals_pyr[0];
+    std::vector<Normal> data;
+    int c;
+    d.download(data, c);
+    cv::Mat display (d.rows(), d.cols(), CV_32FC4, (void*)&data[0]);
+    cv::imshow("jf", display);
+    cv::waitKey(3);
 
     return ++frame_counter_, true;
 }

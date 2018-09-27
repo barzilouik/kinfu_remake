@@ -1,5 +1,6 @@
 #pragma once
 
+
 #include <kfusion/cuda/device_array.hpp>
 #include "safe_call.hpp"
 
@@ -15,7 +16,7 @@ namespace kfusion
         typedef unsigned short ushort;
         typedef unsigned char uchar;
 
-        typedef PtrStepSz<ushort> Dists;
+        typedef PtrStepSz<float> Dists;
         typedef DeviceArray2D<ushort> Depth;
         typedef DeviceArray2D<Normal> Normals;
         typedef DeviceArray2D<Point> Points;
@@ -103,7 +104,7 @@ namespace kfusion
 
         //tsdf volume functions
         void clear_volume(TsdfVolume volume);
-        void integrate(const Dists& depth, TsdfVolume& volume, const Aff3f& aff, const Projector& proj);
+        void integrate(const PtrStepSz<float>& depth, TsdfVolume& volume, const Aff3f& aff, const Projector& proj);
 
         void raycast(const TsdfVolume& volume, const Aff3f& aff, const Mat3f& Rinv,
                      const Reprojector& reproj, Depth& depth, Normals& normals, float step_factor, float delta_factor);

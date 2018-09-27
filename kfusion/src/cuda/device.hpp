@@ -2,6 +2,7 @@
 
 #include "internal.hpp"
 #include "temp_utils.hpp"
+#include <cuda_fp16.h>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// TsdfVolume
@@ -56,9 +57,9 @@ __kf_device__ ushort2 kfusion::device::pack_tsdf (float tsdf, int weight)
 __kf_device__ float kfusion::device::unpack_tsdf(ushort2 value, int& weight)
 {
     weight = value.y;
-    return __half2float (value.x);
+    return __half2float ((__half)value.x);
 }
-__kf_device__ float kfusion::device::unpack_tsdf (ushort2 value) { return __half2float (value.x); }
+__kf_device__ float kfusion::device::unpack_tsdf (ushort2 value) { return __half2float ((__half)value.x); }
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
