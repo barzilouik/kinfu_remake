@@ -27,19 +27,19 @@ namespace kfusion
         struct Mat3f { float3 data[3]; };
         struct Aff3f { Mat3f R; Vec3f t; };
 
-        struct TsdfVolume
+         struct TsdfVolume
         {
         public:
             typedef ushort2 elem_type;
 
-            elem_type *const data;
+            elem_type * data;
             const int3 dims;
             const float3 voxel_size;
             const float trunc_dist;
             const int max_weight;
 
             TsdfVolume(elem_type* data, int3 dims, float3 voxel_size, float trunc_dist, int max_weight);
-            //TsdfVolume(const TsdfVolume&);
+            TsdfVolume(const TsdfVolume&);
 
             __kf_device__ elem_type* operator()(int x, int y, int z);
             __kf_device__ const elem_type* operator() (int x, int y, int z) const ;

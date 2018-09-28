@@ -1,6 +1,8 @@
 #pragma once
 
 #include "cuda_runtime_api.h"
+#include "cuda_device_runtime_api.h"
+#include "cuda_fp16.h"
 
 namespace kfusion
 {

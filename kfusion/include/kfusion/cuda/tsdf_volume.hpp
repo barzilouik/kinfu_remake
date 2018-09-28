@@ -49,8 +49,8 @@ namespace kfusion
 
             void swap(CudaData& data);
 
-            DeviceArray<Point> fetchCloud(DeviceArray<Point>& cloud_buffer) const;
-            void fetchNormals(const DeviceArray<Point>& cloud, DeviceArray<Normal>& normals) const;
+            DeviceArray<Point> fetchCloud(DeviceArray<Point>& cloud_buffer);
+            void fetchNormals(const DeviceArray<Point>& cloud, DeviceArray<Normal>& normals);
 
             struct Entry
             {

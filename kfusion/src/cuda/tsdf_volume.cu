@@ -1,6 +1,13 @@
 #include "device.hpp"
 #include "texture_binder.hpp"
 #include <cstdio>
+#include <limits>
+
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 200)
+
+#define printf(f, ...) ((void)(f, __VA_ARGS__),0)
+
+#endif
 
 
 using namespace kfusion::device;
@@ -31,7 +38,7 @@ namespace kfusion
 
 void kfusion::device::clear_volume(TsdfVolume volume)
 {
-    dim3 block (32, 8);
+    dim3 block (64, 16);
     dim3 grid (1, 1, 1);
     grid.x = divUp (volume.dims.x, block.x);
     grid.y = divUp (volume.dims.y, block.y);
@@ -47,8 +54,6 @@ namespace kfusion
 {
     namespace device
     {
-    __device__ int pointss = 0;
-
         texture<float, 2> dists_tex(0, cudaFilterModePoint, cudaAddressModeBorder, cudaCreateChannelDescHalf());
 
         struct TsdfIntegrator
@@ -56,12 +61,11 @@ namespace kfusion
             Aff3f vol2cam;
             Projector proj;
             int2 dists_size;
-
+            PtrStepSz<float> dists;
             float tranc_dist_inv;
 
-
             __kf_device__
-            void operator()(TsdfVolume& volume) const
+            void operator ()(TsdfVolume& volume) const
             {
                 int x = blockIdx.x * blockDim.x + threadIdx.x;
                 int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -69,17 +73,14 @@ namespace kfusion
                 if (x >= volume.dims.x || y >= volume.dims.y)
                     return;
 
-
-                // printf("Call for value : %d, %d\n", x,y);
-
-                //float3 zstep = vol2cam.R * make_float3(0.f, 0.f, volume.voxel_size.z);
-                float3 zstep = make_float3(vol2cam.R.data[0].z, vol2cam.R.data[1].z, vol2cam.R.data[2].z) * volume.voxel_size.z;
+                //float3 zstep = vol2cam.R * make_float3(0.f, 0.f, volume->voxel_size.z);
+                float3 zstep_ = make_float3(vol2cam.R.data[0].z, vol2cam.R.data[1].z, vol2cam.R.data[2].z) * volume.voxel_size.z;
 
                 float3 vx = make_float3(x * volume.voxel_size.x, y * volume.voxel_size.y, 0);
                 float3 vc = vol2cam * vx; //tranform from volume coo frame to camera one
 
                 TsdfVolume::elem_type* vptr = volume.beg(x, y);
-                for(int i = 0; i < volume.dims.z; ++i, vc += zstep, vptr = volume.zstep(vptr))
+                for(int i = 0; i < volume.dims.z; ++i, vc += zstep_, vptr = volume.zstep(vptr))
                 {
                     float2 coo = proj(vc);
 
@@ -90,34 +91,16 @@ namespace kfusion
                         continue;
                     //#endif
                     float Dp = tex2D(dists_tex, coo.x, coo.y);
+
                     if(Dp == 0 || vc.z <= 0)
                         continue;
 
-                    float sdf = __fsqrt_rn(dot(vc, vc)) - Dp; //Dp - norm(v)
-
-//                    if (Dp >= 0.3 && Dp <=2.0)
-//                    {
-//                    	printf("%f\n", Dp);
-//                    	printf("%f >= %f\n", sdf,-volume.trunc_dist);
-//                    }
-
                     float tsdf;
-                    if (sdf > 0) //= -volume.trunc_dist)
-                    {
+                    float sdf = __fsqrt_rn(dot(vc, vc)) - Dp; //Dp - norm(v)
+                    if (sdf > 0)
                         tsdf = fmin(1.f, sdf * tranc_dist_inv);
-//                        if (sdf > volume.trunc_dist)
-//                            					printf("sdf > 0 : %f(%f)\n", tsdf,sdf);
-                    }
                     else
-                    {
-                        tsdf = fmax(-1.f, sdf * tranc_dist_inv);
-//                        if (sdf > -1)
-//                            					printf("sdf < 0 : %f(%f)\n", tsdf,sdf);
-
-                    }
-
-					pointss++;
-
+                        tsdf = fabs(fmax(-1.f, sdf * tranc_dist_inv));
 
 					//read and unpack
 					int weight_prev;
@@ -127,18 +110,12 @@ namespace kfusion
 					float tsdf_new = __fdividef(__fmaf_rn(tsdf_prev, (float)weight_prev, tsdf * (float)weight_new), (float)weight_prev + weight_new);
 
 					//pack and write
-					ushort2 pp = pack_tsdf (tsdf_new, weight_new);
-					gmem::StCs(pp, vptr);
-
-					tsdf_prev = unpack_tsdf (gmem::LdCs(vptr), weight_prev);
-//					if (sdf > -1 && sdf < 1)
-//						printf("%hu, %f, %f(%f) = %f\n", pp.x, tsdf_prev, tsdf,sdf, tsdf_new);
-
+					gmem::StCs(pack_tsdf (tsdf_new*1000.f, weight_new), vptr);
                 }  // for(;;)
             }
         };
 
-        __global__ void integrate_kernel( const TsdfIntegrator integrator, TsdfVolume volume) { integrator(volume); };
+        __global__ void integrate_kernel(const TsdfIntegrator integrator, TsdfVolume volume) { integrator (volume); };
     }
 }
 
@@ -149,6 +126,7 @@ void kfusion::device::integrate(const PtrStepSz<float>& dists, TsdfVolume& volum
     ti.vol2cam = aff;
     ti.proj = proj;
     ti.tranc_dist_inv = 1.f/volume.trunc_dist;
+    ti.dists = dists;
 
     dists_tex.filterMode = cudaFilterModePoint;
     dists_tex.addressMode[0] = cudaAddressModeBorder;
@@ -156,18 +134,12 @@ void kfusion::device::integrate(const PtrStepSz<float>& dists, TsdfVolume& volum
     dists_tex.addressMode[2] = cudaAddressModeBorder;
     TextureBinder binder(dists, dists_tex, cudaCreateChannelDescHalf()); (void)binder;
 
-    dim3 block(32, 8);
+    dim3 block(64, 16);
     dim3 grid(divUp(volume.dims.x, block.x), divUp(volume.dims.y, block.y));
 
     integrate_kernel<<<grid, block>>>(ti, volume);
     cudaSafeCall ( cudaGetLastError () );
     cudaSafeCall ( cudaDeviceSynchronize() );
-
-
-    int size;
-    cudaSafeCall ( cudaMemcpyFromSymbol (&size, pointss, sizeof(size)) );
-
-    /*printf("%d\n", size);*/
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -427,7 +399,7 @@ void kfusion::device::raycast(const TsdfVolume& volume, const Aff3f& aff, const 
     rc.gradient_delta = volume.voxel_size * gradient_delta_factor;
     rc.voxel_size_inv = 1.f/volume.voxel_size;
 
-    dim3 block(32, 8);
+    dim3 block(64, 16);
     dim3 grid (divUp (depth.cols(), block.x), divUp (depth.rows(), block.y));
 
     raycast_kernel<<<grid, block>>>(rc, (PtrStepSz<ushort>)depth, normals);
@@ -445,7 +417,7 @@ void kfusion::device::raycast(const TsdfVolume& volume, const Aff3f& aff, const 
     rc.gradient_delta = volume.voxel_size * gradient_delta_factor;
     rc.voxel_size_inv = 1.f/volume.voxel_size;
 
-    dim3 block(32, 8);
+    dim3 block(64, 16);
     dim3 grid (divUp (points.cols(), block.x), divUp (points.rows(), block.y));
 
     raycast_kernel<<<grid, block>>>(rc, (PtrStepSz<Point>)points, normals);
@@ -491,8 +463,8 @@ namespace kfusion
         {
             enum
             {
-                CTA_SIZE_X = 32,
-                CTA_SIZE_Y = 6,
+                CTA_SIZE_X = 64,
+                CTA_SIZE_Y = 8,
                 CTA_SIZE = CTA_SIZE_X * CTA_SIZE_Y,
 
                 MAX_LOCAL_POINTS = 3
@@ -505,7 +477,7 @@ namespace kfusion
 
             __kf_device__ float fetch(int x, int y, int z, int& weight) const
             {
-                return unpack_tsdf(*volume(x, y, z), weight);
+                return unpack_tsdf(*volume(x, y, z), weight) * 0.001f;
             }
 
             __kf_device__ void operator () (PtrSz<Point> output) const
@@ -571,7 +543,7 @@ namespace kfusion
                                         points[local_count++] = aff * p;
 //                                        printf("(%f, %f, %f)\n",points[local_count-1].x,points[local_count-1].y,points[local_count-1].z);
 //                                        printf("(%f, %f, %f)\n",p.x,p.y,p.z);
-                                        printf("(%f, %f, %f, %f, %f, %f, %f)\n",Vnx,F, Fn, fabs (F), fabs (Fn), fabs (F) + fabs (Fn), d_inv);
+//                                        printf("(%f, %f, %f, %f, %f, %f, %f)\n",Vnx,F, Fn, fabs (F), fabs (Fn), fabs (F) + fabs (Fn), d_inv);
                                     }
                                 }
                             }  /* if (x + 1 < volume.dims.x) */
@@ -811,7 +783,7 @@ void kfusion::device::extractNormals (const TsdfVolume& volume, const PtrSz<Poin
     en.aff = aff;
     en.Rinv = Rinv;
 
-    dim3 block (256);
+    dim3 block (1024);
     dim3 grid (divUp ((int)points.size, block.x));
 
     extract_normals_kernel<<<grid, block>>>(en, output);
