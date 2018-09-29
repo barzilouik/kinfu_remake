@@ -58,8 +58,6 @@ namespace kfusion
 
         KinFu(const KinFuParams& params);
 
-        virtual ~KinFu () { if (volume_) delete volume_; }
-
         const KinFuParams& params() const;
         KinFuParams& params();
 

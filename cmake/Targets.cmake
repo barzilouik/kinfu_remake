@@ -7,8 +7,6 @@ function(kf_source_group group)
   #if (___size GREATER 0)
     source_group(${group} FILES ${srcs})
   #endif()
-message( STATUS "here")
-message( STATUS ${group})
 endfunction()
 
 
@@ -91,16 +89,10 @@ macro(add_module_library name)
   set(__has_cuda OFF)
   check_cuda(__has_cuda)  
   
-  set(__lib_type SHARED)
+  set(__lib_type STATIC)
   if (${ARGV1} MATCHES "SHARED|STATIC")
     set(__lib_type ${ARGV1})
   endif()
-
-  message (WARNING "${ARGV1}")
-  message (WARNING "${__lib_type}")
-  message (WARNING "${sources}")
-  message (WARNING "${__has_cuda}")
-  message (WARNING "${module_name}")
 
   if (__has_cuda)  
     cuda_add_library(${module_name} ${__lib_type} ${sources})

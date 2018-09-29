@@ -50,8 +50,7 @@ kfusion::KinFu::KinFu(const KinFuParams& params) : frame_counter_(0), params_(pa
 {
     CV_Assert(params.volume_dims[0] % 32 == 0);
 
-//    volume_ = cv::Ptr<cuda::TsdfVolume>(new cuda::TsdfVolume(params_.volume_dims));
-    volume_ = new cuda::TsdfVolume(params_.volume_dims);
+    volume_ = cv::Ptr<cuda::TsdfVolume>(new cuda::TsdfVolume(params_.volume_dims));
 
     volume_->setTruncDist(params_.tsdf_trunc_dist);
     volume_->setMaxWeight(params_.tsdf_max_weight);
@@ -183,6 +182,26 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
     // ICP
     Affine3f affine; // cuur -> prev
     {
+
+
+      Cloud curr = curr_.points_pyr[0];
+      std::vector<Point> curr_data;
+      int curr_cols;
+      curr.download(curr_data, curr_cols);
+      cv::Mat curr_display (curr.rows(), curr.cols(), CV_32FC4, (void*)&curr_data[0]);
+      cv::imshow("curr", curr_display);
+      cv::waitKey(3);
+
+
+
+      Cloud prev = prev_.points_pyr[0];
+      std::vector<Point> prev_data;
+      int prev_cols;
+      prev.download(prev_data, prev_cols);
+      cv::Mat prev_display (prev.rows(), prev.cols(), CV_32FC4, (void*)&prev_data[0]);
+      cv::imshow("prev", prev_display);
+      cv::waitKey(3);
+
         //ScopeTime time("icp");
 #if defined USE_DEPTH
         bool ok = icp_->estimateTransform(affine, p.intr, curr_.depth_pyr, curr_.normals_pyr, prev_.depth_pyr, prev_.normals_pyr);
@@ -208,6 +227,8 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
         volume_->integrate(dists_, poses_.back(), p.intr);
     }
 
+
+
     ///////////////////////////////////////////////////////////////////////////////////////////
     // Ray casting
     {
@@ -223,14 +244,6 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
 #endif
         cuda::waitAllDefaultStream();
     }
-
-    Normals d = curr_.normals_pyr[0];
-    std::vector<Normal> data;
-    int c;
-    d.download(data, c);
-    cv::Mat display (d.rows(), d.cols(), CV_32FC4, (void*)&data[0]);
-    cv::imshow("jf", display);
-    cv::waitKey(3);
 
     return ++frame_counter_, true;
 }

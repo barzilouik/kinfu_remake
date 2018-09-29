@@ -3,13 +3,6 @@
 #include <cstdio>
 #include <limits>
 
-#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 200)
-
-#define printf(f, ...) ((void)(f, __VA_ARGS__),0)
-
-#endif
-
-
 using namespace kfusion::device;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -61,7 +54,6 @@ namespace kfusion
             Aff3f vol2cam;
             Projector proj;
             int2 dists_size;
-            PtrStepSz<float> dists;
             float tranc_dist_inv;
 
             __kf_device__
@@ -119,14 +111,13 @@ namespace kfusion
     }
 }
 
-void kfusion::device::integrate(const PtrStepSz<float>& dists, TsdfVolume& volume, const Aff3f& aff, const Projector& proj)
+void kfusion::device::integrate(const PtrStepSz<__half>& dists, TsdfVolume& volume, const Aff3f& aff, const Projector& proj)
 {
     TsdfIntegrator ti;
     ti.dists_size = make_int2(dists.cols, dists.rows);
     ti.vol2cam = aff;
     ti.proj = proj;
     ti.tranc_dist_inv = 1.f/volume.trunc_dist;
-    ti.dists = dists;
 
     dists_tex.filterMode = cudaFilterModePoint;
     dists_tex.addressMode[0] = cudaAddressModeBorder;
@@ -329,16 +320,16 @@ namespace kfusion
                     next += vstep;
 
                     tsdf_next = fetch_tsdf(next);
-                    if (tsdf_curr < 0.f && tsdf_next > 0.f)
-                        break;
+//                    if (tsdf_curr < 0.f && tsdf_next > 0.f)
+//                        break;
 
-                    if (tsdf_curr > 0.f && tsdf_next < 0.f)
+//                    if (tsdf_curr > 0.f && tsdf_next < 0.f)
+                    if ((tsdf_curr == 0.f && tsdf_next > 0.f) || (tsdf_curr > 0.f && tsdf_next == 0.f))
                     {
                         float Ft   = interpolate(volume, curr * voxel_size_inv);
                         float Ftdt = interpolate(volume, next * voxel_size_inv);
 
                         float Ts = tcurr - __fdividef(time_step * Ft, Ftdt - Ft);
-
                         float3 vertex = ray_org + ray_dir * Ts;
                         float3 normal = compute_normal(vertex);
 
@@ -464,7 +455,7 @@ namespace kfusion
             enum
             {
                 CTA_SIZE_X = 64,
-                CTA_SIZE_Y = 8,
+                CTA_SIZE_Y = 16,
                 CTA_SIZE = CTA_SIZE_X * CTA_SIZE_Y,
 
                 MAX_LOCAL_POINTS = 3
@@ -769,6 +760,14 @@ size_t kfusion::device::extractCloud (const TsdfVolume& volume, const Aff3f& aff
     extract_kernel<<<grid, block>>>(fs, output);
     cudaSafeCall ( cudaGetLastError () );
     cudaSafeCall (cudaDeviceSynchronize ());
+
+//    for (int i = 0; i < 512; ++i)
+//    	for (int j = 0; j < 512; ++j)
+//    		for (int k = 0; k < 512; ++k)
+//    		{
+//    			ushort2 dd = *(volume.data+i+j*512+k*512*512);
+//    			if (dd.x != 0)  std::cout << (i+j*512+k*512*512) << std::endl;
+//    		}
 
     int size;
     cudaSafeCall ( cudaMemcpyFromSymbol (&size, output_count, sizeof(size)) );

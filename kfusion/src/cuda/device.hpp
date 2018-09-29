@@ -2,17 +2,18 @@
 
 #include "internal.hpp"
 #include "temp_utils.hpp"
+#include <cuda_fp16.h>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// TsdfVolume device implementation
+/// TsdfVolume
 
-__kf_device__
-kfusion::device::TsdfVolume::TsdfVolume(elem_type* _data, int3 _dims, float3 _voxel_size, float _trunc_dist, int _max_weight)
-  : data(_data), dims(_dims), voxel_size(_voxel_size), trunc_dist(_trunc_dist), max_weight(_max_weight) {}
+//__kf_device__
+//kfusion::device::TsdfVolume::TsdfVolume(elem_type* _data, int3 _dims, float3 _voxel_size, float _trunc_dist, int _max_weight)
+//  : data(_data), dims(_dims), voxel_size(_voxel_size), trunc_dist(_trunc_dist), max_weight(_max_weight) {}
 
-__kf_device__
-kfusion::device::TsdfVolume::TsdfVolume(const TsdfVolume& other)
-  : data(other.data), dims(other.dims), voxel_size(other.voxel_size), trunc_dist(other.trunc_dist), max_weight(other.max_weight) {}
+//__kf_device__
+//kfusion::device::TsdfVolume::TsdfVolume(const TsdfVolume& other)
+//  : data(other.data), dims(other.dims), voxel_size(other.voxel_size), trunc_dist(other.trunc_dist), max_weight(other.max_weight) {}
 
 __kf_device__ kfusion::device::TsdfVolume::elem_type* kfusion::device::TsdfVolume::operator()(int x, int y, int z)
 { return data + x + y*dims.x + z*dims.y*dims.x; }
@@ -84,11 +85,11 @@ namespace kfusion
         struct gmem
         {
             template<typename T> __kf_device__ static T LdCs(T* ptr);
-            template<typename T> __kf_device__ static void StCs(const T val, T*& ptr);
+            template<typename T> __kf_device__ static void StCs(const T& val, T*& ptr);
         };
 
         template<> __kf_device__ ushort2 gmem::LdCs(ushort2* ptr);
-        template<> __kf_device__ void gmem::StCs(const ushort2 val, ushort2*& ptr);
+        template<> __kf_device__ void gmem::StCs(const ushort2& val, ushort2*& ptr);
     }
 }
 
@@ -108,7 +109,7 @@ namespace kfusion
         return val;
     }
 
-    template<> __kf_device__ void kfusion::device::gmem::StCs(const ushort2 val, ushort2*& ptr)
+    template<> __kf_device__ void kfusion::device::gmem::StCs(const ushort2& val, ushort2*& ptr)
     {
         ushort cx = val.x, cy = val.y;
         asm("st.global.cs.v2.u16 [%0], {%1, %2};" : "=l"(ptr) : "h"(cx), "h"(cy));
@@ -117,7 +118,7 @@ namespace kfusion
 
 #else
     template<> __kf_device__ ushort2 kfusion::device::gmem::LdCs(ushort2* ptr) { return *ptr; }
-    template<> __kf_device__ void kfusion::device::gmem::StCs(const ushort2 val, ushort2*& ptr) { *ptr = val; }
+    template<> __kf_device__ void kfusion::device::gmem::StCs(const ushort2& val, ushort2*& ptr) { *ptr = val; }
 #endif
 
 
