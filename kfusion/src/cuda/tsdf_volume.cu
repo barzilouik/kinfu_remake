@@ -19,10 +19,10 @@ namespace kfusion
 
             if (x < tsdf.dims.x && y < tsdf.dims.y)
             {
-                ushort2 *beg = tsdf.beg(x, y);
-                ushort2 *end = beg + tsdf.dims.x * tsdf.dims.y * tsdf.dims.z;
+            	TsdfVolume::elem_type *beg = tsdf.beg(x, y);
+            	TsdfVolume::elem_type *end = beg + tsdf.dims.x * tsdf.dims.y * tsdf.dims.z;
 
-                for(ushort2* pos = beg; pos != end; pos = tsdf.zstep(pos))
+                for(TsdfVolume::elem_type* pos = beg; pos != end; pos = tsdf.zstep(pos))
                     *pos = pack_tsdf (0.f, 0);
             }
         }
@@ -92,7 +92,7 @@ namespace kfusion
                     if (sdf > 0)
                         tsdf = fmin(1.f, sdf * tranc_dist_inv);
                     else
-                        tsdf = fabs(fmax(-1.f, sdf * tranc_dist_inv));
+                        tsdf = fmax(-1.f, sdf * tranc_dist_inv);
 
 					//read and unpack
 					int weight_prev;
@@ -320,11 +320,11 @@ namespace kfusion
                     next += vstep;
 
                     tsdf_next = fetch_tsdf(next);
-//                    if (tsdf_curr < 0.f && tsdf_next > 0.f)
-//                        break;
+                    if (tsdf_curr < 0.f && tsdf_next > 0.f)
+                        break;
 
-//                    if (tsdf_curr > 0.f && tsdf_next < 0.f)
-                    if ((tsdf_curr == 0.f && tsdf_next > 0.f) || (tsdf_curr > 0.f && tsdf_next == 0.f))
+                    if (tsdf_curr > 0.f && tsdf_next < 0.f)
+//                    if ((tsdf_curr == 0.f && tsdf_next > 0.f) || (tsdf_curr > 0.f && tsdf_next == 0.f))
                     {
                         float Ft   = interpolate(volume, curr * voxel_size_inv);
                         float Ftdt = interpolate(volume, next * voxel_size_inv);

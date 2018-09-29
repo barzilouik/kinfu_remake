@@ -1,9 +1,8 @@
 #pragma once
 
-
+#include <cuda_fp16.h>
 #include <kfusion/cuda/device_array.hpp>
 #include "safe_call.hpp"
-#include <cuda_fp16.h>
 
 //#define USE_DEPTH
 
@@ -28,12 +27,12 @@ namespace kfusion
         struct Mat3f { float3 data[3]; };
         struct Aff3f { Mat3f R; Vec3f t; };
 
-         struct TsdfVolume
+        struct TsdfVolume
         {
         public:
-            typedef ushort2 elem_type;
+            typedef short2 elem_type;
 
-            elem_type * data;
+            elem_type *const data;
             const int3 dims;
             const float3 voxel_size;
             const float trunc_dist;
@@ -113,9 +112,9 @@ namespace kfusion
         void raycast(const TsdfVolume& volume, const Aff3f& aff, const Mat3f& Rinv,
                      const Reprojector& reproj, Points& points, Normals& normals, float step_factor, float delta_factor);
 
-        __kf_device__ ushort2 pack_tsdf(float tsdf, int weight);
-        __kf_device__ float unpack_tsdf(ushort2 value, int& weight);
-        __kf_device__ float unpack_tsdf(ushort2 value);
+        __kf_device__ short2 pack_tsdf(float tsdf, int weight);
+        __kf_device__ float unpack_tsdf(short2 value, int& weight);
+        __kf_device__ float unpack_tsdf(short2 value);
 
 
         //image proc functions
