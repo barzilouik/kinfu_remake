@@ -16,7 +16,11 @@ namespace kfusion
         typedef unsigned short ushort;
         typedef unsigned char uchar;
 
+#if defined __CUDA_ARCH__ && __CUDA_ARCH__ >= 500
         typedef PtrStepSz<__half> Dists;
+#else
+        typedef PtrStepSz<ushort> Dists;
+#endif
         typedef DeviceArray2D<ushort> Depth;
         typedef DeviceArray2D<Normal> Normals;
         typedef DeviceArray2D<Point> Points;
@@ -30,8 +34,11 @@ namespace kfusion
         struct TsdfVolume
         {
         public:
+#if defined __CUDA_ARCH__ && __CUDA_ARCH__ >= 500
             typedef short2 elem_type;
-
+#else
+            typedef ushort2 elem_type;
+#endif
             elem_type *const data;
             const int3 dims;
             const float3 voxel_size;
@@ -112,9 +119,9 @@ namespace kfusion
         void raycast(const TsdfVolume& volume, const Aff3f& aff, const Mat3f& Rinv,
                      const Reprojector& reproj, Points& points, Normals& normals, float step_factor, float delta_factor);
 
-        __kf_device__ short2 pack_tsdf(float tsdf, int weight);
-        __kf_device__ float unpack_tsdf(short2 value, int& weight);
-        __kf_device__ float unpack_tsdf(short2 value);
+        __kf_device__ TsdfVolume::elem_type pack_tsdf(float tsdf, int weight);
+        __kf_device__ float unpack_tsdf(TsdfVolume::elem_type value, int& weight);
+        __kf_device__ float unpack_tsdf(TsdfVolume::elem_type value);
 
 
         //image proc functions

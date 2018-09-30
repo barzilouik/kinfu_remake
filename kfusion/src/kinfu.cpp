@@ -1,5 +1,3 @@
-#include <opencv2/highgui.hpp>
-
 #include "precomp.hpp"
 #include "internal.hpp"
 
@@ -182,26 +180,6 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
     // ICP
     Affine3f affine; // cuur -> prev
     {
-
-
-      Cloud curr = curr_.points_pyr[0];
-      std::vector<Point> curr_data;
-      int curr_cols;
-      curr.download(curr_data, curr_cols);
-      cv::Mat curr_display (curr.rows(), curr.cols(), CV_32FC4, (void*)&curr_data[0]);
-      cv::imshow("curr", curr_display);
-      cv::waitKey(3);
-
-
-
-      Cloud prev = prev_.points_pyr[0];
-      std::vector<Point> prev_data;
-      int prev_cols;
-      prev.download(prev_data, prev_cols);
-      cv::Mat prev_display (prev.rows(), prev.cols(), CV_32FC4, (void*)&prev_data[0]);
-      cv::imshow("prev", prev_display);
-      cv::waitKey(3);
-
         //ScopeTime time("icp");
 #if defined USE_DEPTH
         bool ok = icp_->estimateTransform(affine, p.intr, curr_.depth_pyr, curr_.normals_pyr, prev_.depth_pyr, prev_.normals_pyr);
@@ -226,8 +204,6 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
         //ScopeTime time("tsdf");
         volume_->integrate(dists_, poses_.back(), p.intr);
     }
-
-
 
     ///////////////////////////////////////////////////////////////////////////////////////////
     // Ray casting

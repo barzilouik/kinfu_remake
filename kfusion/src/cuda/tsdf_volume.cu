@@ -1,7 +1,5 @@
 #include "device.hpp"
 #include "texture_binder.hpp"
-#include <cstdio>
-#include <limits>
 
 using namespace kfusion::device;
 
@@ -31,7 +29,7 @@ namespace kfusion
 
 void kfusion::device::clear_volume(TsdfVolume volume)
 {
-    dim3 block (64, 16);
+    dim3 block (32, 8);
     dim3 grid (1, 1, 1);
     grid.x = divUp (volume.dims.x, block.x);
     grid.y = divUp (volume.dims.y, block.y);
@@ -54,10 +52,11 @@ namespace kfusion
             Aff3f vol2cam;
             Projector proj;
             int2 dists_size;
+
             float tranc_dist_inv;
 
             __kf_device__
-            void operator ()(TsdfVolume& volume) const
+            void operator()(TsdfVolume& volume) const
             {
                 int x = blockIdx.x * blockDim.x + threadIdx.x;
                 int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -65,14 +64,14 @@ namespace kfusion
                 if (x >= volume.dims.x || y >= volume.dims.y)
                     return;
 
-                //float3 zstep = vol2cam.R * make_float3(0.f, 0.f, volume->voxel_size.z);
-                float3 zstep_ = make_float3(vol2cam.R.data[0].z, vol2cam.R.data[1].z, vol2cam.R.data[2].z) * volume.voxel_size.z;
+                //float3 zstep = vol2cam.R * make_float3(0.f, 0.f, volume.voxel_size.z);
+                float3 zstep = make_float3(vol2cam.R.data[0].z, vol2cam.R.data[1].z, vol2cam.R.data[2].z) * volume.voxel_size.z;
 
                 float3 vx = make_float3(x * volume.voxel_size.x, y * volume.voxel_size.y, 0);
                 float3 vc = vol2cam * vx; //tranform from volume coo frame to camera one
 
                 TsdfVolume::elem_type* vptr = volume.beg(x, y);
-                for(int i = 0; i < volume.dims.z; ++i, vc += zstep_, vptr = volume.zstep(vptr))
+                for(int i = 0; i < volume.dims.z; ++i, vc += zstep, vptr = volume.zstep(vptr))
                 {
                     float2 coo = proj(vc);
 
@@ -107,11 +106,11 @@ namespace kfusion
             }
         };
 
-        __global__ void integrate_kernel(const TsdfIntegrator integrator, TsdfVolume volume) { integrator (volume); };
+        __global__ void integrate_kernel( const TsdfIntegrator integrator, TsdfVolume volume) { integrator(volume); };
     }
 }
 
-void kfusion::device::integrate(const PtrStepSz<__half>& dists, TsdfVolume& volume, const Aff3f& aff, const Projector& proj)
+void kfusion::device::integrate(const Dists& dists, TsdfVolume& volume, const Aff3f& aff, const Projector& proj)
 {
     TsdfIntegrator ti;
     ti.dists_size = make_int2(dists.cols, dists.rows);
@@ -125,7 +124,7 @@ void kfusion::device::integrate(const PtrStepSz<__half>& dists, TsdfVolume& volu
     dists_tex.addressMode[2] = cudaAddressModeBorder;
     TextureBinder binder(dists, dists_tex, cudaCreateChannelDescHalf()); (void)binder;
 
-    dim3 block(64, 16);
+    dim3 block(32, 8);
     dim3 grid(divUp(volume.dims.x, block.x), divUp(volume.dims.y, block.y));
 
     integrate_kernel<<<grid, block>>>(ti, volume);
@@ -197,7 +196,6 @@ namespace kfusion
             float time_step;
             float3 gradient_delta;
             float3 voxel_size_inv;
-
 
             TsdfRaycaster(const TsdfVolume& volume, const Aff3f& aff, const Mat3f& Rinv, const Reprojector& _reproj);
 
@@ -324,12 +322,12 @@ namespace kfusion
                         break;
 
                     if (tsdf_curr > 0.f && tsdf_next < 0.f)
-//                    if ((tsdf_curr == 0.f && tsdf_next > 0.f) || (tsdf_curr > 0.f && tsdf_next == 0.f))
                     {
                         float Ft   = interpolate(volume, curr * voxel_size_inv);
                         float Ftdt = interpolate(volume, next * voxel_size_inv);
 
                         float Ts = tcurr - __fdividef(time_step * Ft, Ftdt - Ft);
+
                         float3 vertex = ray_org + ray_dir * Ts;
                         float3 normal = compute_normal(vertex);
 
@@ -390,7 +388,7 @@ void kfusion::device::raycast(const TsdfVolume& volume, const Aff3f& aff, const 
     rc.gradient_delta = volume.voxel_size * gradient_delta_factor;
     rc.voxel_size_inv = 1.f/volume.voxel_size;
 
-    dim3 block(64, 16);
+    dim3 block(32, 8);
     dim3 grid (divUp (depth.cols(), block.x), divUp (depth.rows(), block.y));
 
     raycast_kernel<<<grid, block>>>(rc, (PtrStepSz<ushort>)depth, normals);
@@ -408,7 +406,7 @@ void kfusion::device::raycast(const TsdfVolume& volume, const Aff3f& aff, const 
     rc.gradient_delta = volume.voxel_size * gradient_delta_factor;
     rc.voxel_size_inv = 1.f/volume.voxel_size;
 
-    dim3 block(64, 16);
+    dim3 block(32, 8);
     dim3 grid (divUp (points.cols(), block.x), divUp (points.rows(), block.y));
 
     raycast_kernel<<<grid, block>>>(rc, (PtrStepSz<Point>)points, normals);
@@ -454,8 +452,8 @@ namespace kfusion
         {
             enum
             {
-                CTA_SIZE_X = 64,
-                CTA_SIZE_Y = 16,
+                CTA_SIZE_X = 32,
+                CTA_SIZE_Y = 6,
                 CTA_SIZE = CTA_SIZE_X * CTA_SIZE_Y,
 
                 MAX_LOCAL_POINTS = 3
@@ -468,7 +466,7 @@ namespace kfusion
 
             __kf_device__ float fetch(int x, int y, int z, int& weight) const
             {
-                return unpack_tsdf(*volume(x, y, z), weight) * 0.001f;
+                return unpack_tsdf(*volume(x, y, z), weight);
             }
 
             __kf_device__ void operator () (PtrSz<Point> output) const
@@ -502,10 +500,8 @@ namespace kfusion
                     {
                         int W;
                         float F = fetch(x, y, z, W);
-
-                        if (W != 0 && F != 1.f && F != -1.f)
+                        if (W != 0 && F != 1.f)
                         {
-
                             V.z = (z + 0.5f) * volume.voxel_size.z;
 
                             //process dx
@@ -514,14 +510,9 @@ namespace kfusion
                                 int Wn;
                                 float Fn = fetch(x + 1, y, z, Wn);
 
-
-
-                                if (Wn != 0 && Fn != 1.f && Fn != -1.f)
-                                {
-//                                    if ((F > 0 && Fn < 0) || (F < 0 && Fn > 0))
+                                if (Wn != 0 && Fn != 1.f)
+                                    if ((F > 0 && Fn < 0) || (F < 0 && Fn > 0))
                                     {
-//                                    	printf("%f, %d, %f, %d\n",F,W,Fn,Wn);
-
                                         float3 p;
                                         p.y = V.y;
                                         p.z = V.z;
@@ -532,11 +523,7 @@ namespace kfusion
                                         p.x = (V.x * fabs (Fn) + Vnx * fabs (F)) * d_inv;
 
                                         points[local_count++] = aff * p;
-//                                        printf("(%f, %f, %f)\n",points[local_count-1].x,points[local_count-1].y,points[local_count-1].z);
-//                                        printf("(%f, %f, %f)\n",p.x,p.y,p.z);
-//                                        printf("(%f, %f, %f, %f, %f, %f, %f)\n",Vnx,F, Fn, fabs (F), fabs (Fn), fabs (F) + fabs (Fn), d_inv);
                                     }
-                                }
                             }  /* if (x + 1 < volume.dims.x) */
 
                             //process dy
@@ -545,8 +532,8 @@ namespace kfusion
                                 int Wn;
                                 float Fn = fetch (x, y + 1, z, Wn);
 
-                                if (Wn != 0 && Fn != 1.f && Fn != -1.f)
-//                                    if ((F > 0 && Fn < 0) || (F < 0 && Fn > 0))
+                                if (Wn != 0 && Fn != 1.f)
+                                    if ((F > 0 && Fn < 0) || (F < 0 && Fn > 0))
                                     {
                                         float3 p;
                                         p.x = V.x;
@@ -567,8 +554,8 @@ namespace kfusion
                                 int Wn;
                                 float Fn = fetch (x, y, z + 1, Wn);
 
-                                if (Wn != 0 && Fn != 1.f && Fn != -1.f)
-//                                    if ((F > 0 && Fn < 0) || (F < 0 && Fn > 0))
+                                if (Wn != 0 && Fn != 1.f)
+                                    if ((F > 0 && Fn < 0) || (F < 0 && Fn > 0))
                                     {
                                         float3 p;
                                         p.x = V.x;
@@ -761,14 +748,6 @@ size_t kfusion::device::extractCloud (const TsdfVolume& volume, const Aff3f& aff
     cudaSafeCall ( cudaGetLastError () );
     cudaSafeCall (cudaDeviceSynchronize ());
 
-//    for (int i = 0; i < 512; ++i)
-//    	for (int j = 0; j < 512; ++j)
-//    		for (int k = 0; k < 512; ++k)
-//    		{
-//    			ushort2 dd = *(volume.data+i+j*512+k*512*512);
-//    			if (dd.x != 0)  std::cout << (i+j*512+k*512*512) << std::endl;
-//    		}
-
     int size;
     cudaSafeCall ( cudaMemcpyFromSymbol (&size, output_count, sizeof(size)) );
     return (size_t)size;
@@ -782,7 +761,7 @@ void kfusion::device::extractNormals (const TsdfVolume& volume, const PtrSz<Poin
     en.aff = aff;
     en.Rinv = Rinv;
 
-    dim3 block (1024);
+    dim3 block (256);
     dim3 grid (divUp ((int)points.size, block.x));
 
     extract_normals_kernel<<<grid, block>>>(en, output);

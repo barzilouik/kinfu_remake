@@ -201,6 +201,7 @@ bool kfusion::cuda::ProjectiveICP::estimateTransform(Affine3f& affine, const Int
                 if (cv::viz::isNan (det)) cout << "qnan" << endl;
                 return false;
             }
+
             StreamHelper::Vec6f r;
             cv::solve(A, b, r, cv::DECOMP_SVD);
 

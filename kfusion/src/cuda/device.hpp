@@ -50,33 +50,34 @@ __kf_device__ float3 kfusion::device::Reprojector::operator()(int u, int v, floa
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// packing/unpacking tsdf volume element
 
+#if defined __CUDA_ARCH__ && __CUDA_ARCH__ >= 500
 #define DIVISOR 32767
-//
-__kf_device__ short2 kfusion::device::pack_tsdf (float tsdf, int weight)
+
+__kf_device__ kfusion::device::TsdfVolume::elem_type kfusion::device::pack_tsdf (float tsdf, int weight)
 {
   int fixedp = max (-DIVISOR, min (DIVISOR, __float2int_rz (tsdf * DIVISOR)));
   return make_short2 (fixedp, weight);
 }
 
-__kf_device__ float kfusion::device::unpack_tsdf (short2 value, int& weight)
+__kf_device__ float kfusion::device::unpack_tsdf (TsdfVolume::elem_type value, int& weight)
 {
   weight = value.y;
   return __int2float_rn (value.x) / DIVISOR;
 }
 
-__kf_device__ float kfusion::device::unpack_tsdf (short2 value) { return static_cast<float>(value.x) / DIVISOR;}
+__kf_device__ float kfusion::device::unpack_tsdf (TsdfVolume::elem_type value) { return static_cast<float>(value.x) / DIVISOR;}
+#else
+__kf_device__ kfusion::device::TsdfVolume::elem_type kfusion::device::pack_tsdf (float tsdf, int weight)
+{ return make_ushort2 (__float2half_rn (tsdf), weight); }
 
-//__kf_device__ short2 kfusion::device::pack_tsdf (float tsdf, int weight)
-//{ return make_short2 (__float2half_rn (tsdf), weight); }
-//
-//__kf_device__ float kfusion::device::unpack_tsdf (short2 value, int& weight)
-//{
-//	weight = value.y;
-//	return __half2float ((__half)value.x);
-//}
-//
-//__kf_device__ float kfusion::device::unpack_tsdf (short2 value) { return __half2float ((__half)value.x); }
+__kf_device__ float kfusion::device::unpack_tsdf (TsdfVolume::elem_type value, int& weight)
+{
+	weight = value.y;
+	return __half2float ((__half)value.x);
+}
 
+__kf_device__ float kfusion::device::unpack_tsdf (TsdfVolume::elem_type value) { return __half2float ((__half)value.x); }
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Utility
@@ -104,8 +105,8 @@ namespace kfusion
             template<typename T> __kf_device__ static void StCs(const T& val, T*& ptr);
         };
 
-        template<> __kf_device__ short2 gmem::LdCs(short2* ptr);
-        template<> __kf_device__ void gmem::StCs(const short2& val, short2*& ptr);
+        template<> __kf_device__ TsdfVolume::elem_type gmem::LdCs(TsdfVolume::elem_type* ptr);
+        template<> __kf_device__ void gmem::StCs(const TsdfVolume::elem_type& val, TsdfVolume::elem_type*& ptr);
     }
 }
 
@@ -118,14 +119,14 @@ namespace kfusion
         #define _ASM_PTR_ "r"
     #endif
 
-    template<> __kf_device__ short2 kfusion::device::gmem::LdCs(short2* ptr)
+    template<> __kf_device__ kfusion::device::TsdfVolume::elem_type kfusion::device::gmem::LdCs(TsdfVolume::elem_type* ptr)
     {
-        short2 val;
+    	TsdfVolume::elem_type val;
         asm("ld.global.cs.v2.u16 {%0, %1}, [%2];" : "=h"(reinterpret_cast<ushort&>(val.x)), "=h"(reinterpret_cast<ushort&>(val.y)) : _ASM_PTR_(ptr));
         return val;
     }
 
-    template<> __kf_device__ void kfusion::device::gmem::StCs(const short2& val, short2*& ptr)
+    template<> __kf_device__ void kfusion::device::gmem::StCs(const TsdfVolume::elem_type& val, TsdfVolume::elem_type*& ptr)
     {
         short cx = val.x, cy = val.y;
         asm("st.global.cs.v2.u16 [%0], {%1, %2};" : "="_ASM_PTR_(ptr) : "h"(reinterpret_cast<ushort&>(cx)), "h"(reinterpret_cast<ushort&>(cy)));
@@ -133,8 +134,8 @@ namespace kfusion
     #undef _ASM_PTR_
 
 #else
-    template<> __kf_device__ short2 kfusion::device::gmem::LdCs(short2* ptr) { return *ptr; }
-    template<> __kf_device__ void kfusion::device::gmem::StCs(const short2& val, short2*& ptr) { *ptr = val; }
+    template<> __kf_device__ kfusion::device::TsdfVolume::elem_type kfusion::device::gmem::LdCs(TsdfVolume::elem_type* ptr) { return *ptr; }
+    template<> __kf_device__ void kfusion::device::gmem::StCs(const TsdfVolume::elem_type& val, TsdfVolume::elem_type*& ptr) { *ptr = val; }
 #endif
 
 

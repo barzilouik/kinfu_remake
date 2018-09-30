@@ -1,6 +1,6 @@
 #cmake_minimum_required(VERSION 2.8.8)
 #
-# ---[ Configurations types
+## ---[ Configurations types
 #set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "Possible configurations" FORCE)
 #if (DEFINED CMAKE_BUILD_TYPE)
 #  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS ${CMAKE_CONFIGURATION_TYPES})
@@ -8,7 +8,7 @@
 #
 ## ---[ Solution name
 #project(kfusion C CXX)
-
+#
 # ---[ utility
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/")
 include(cmake/Utils.cmake)
@@ -28,7 +28,11 @@ endif()
 
 # ---[ cuda settings
 set(HAVE_CUDA 1)
-list(APPEND CUDA_NVCC_FLAGS "-gencode;arch=compute_30,code=sm_30;-gencode;arch=compute_35,code=sm_35;-gencode;arch=compute_50,code=sm_50")
+if (CUDA_VERSION_MAJOR GREATER 8)
+  list(APPEND CUDA_NVCC_FLAGS "-gencode;arch=compute_30,code=sm_30;-gencode;arch=compute_35,code=sm_35;-gencode;arch=compute_50,code=sm_50")
+else()
+  list(APPEND CUDA_NVCC_FLAGS "-gencode;arch=compute_20,code=sm_20;-gencode;arch=compute_20,code=sm_21;-gencode;arch=compute_30,code=sm_30;-gencode;arch=compute_35,code=sm_35;-gencode;arch=compute_50,code=sm_50")
+endif()
 
 if(UNIX OR APPLE)
   list(APPEND CUDA_NVCC_FLAGS "-Xcompiler;-fPIC;")
