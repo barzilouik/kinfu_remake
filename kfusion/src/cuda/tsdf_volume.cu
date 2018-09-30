@@ -82,26 +82,25 @@ namespace kfusion
                         continue;
                     //#endif
                     float Dp = tex2D(dists_tex, coo.x, coo.y);
-
                     if(Dp == 0 || vc.z <= 0)
                         continue;
 
-                    float tsdf;
-                    float sdf = __fsqrt_rn(dot(vc, vc)) - Dp; //Dp - norm(v)
-                    if (sdf > 0)
-                        tsdf = fmin(1.f, sdf * tranc_dist_inv);
-                    else
-                        tsdf = fmax(-1.f, sdf * tranc_dist_inv);
+                    float sdf = Dp - __fsqrt_rn(dot(vc, vc)); //Dp - norm(v)
 
-					//read and unpack
-					int weight_prev;
-					float tsdf_prev = unpack_tsdf (gmem::LdCs(vptr), weight_prev);
+                    if (sdf >= -volume.trunc_dist)
+                    {
+                        float tsdf = fmin(1.f, sdf * tranc_dist_inv);
 
-					int weight_new = min (weight_prev + 1, volume.max_weight);
-					float tsdf_new = __fdividef(__fmaf_rn(tsdf_prev, (float)weight_prev, tsdf * (float)weight_new), (float)weight_prev + weight_new);
+                        //read and unpack
+                        int weight_prev;
+                        float tsdf_prev = unpack_tsdf (gmem::LdCs(vptr), weight_prev);
 
-					//pack and write
-					gmem::StCs(pack_tsdf (tsdf_new*1000.f, weight_new), vptr);
+                        float tsdf_new = __fdividef(__fmaf_rn(tsdf_prev, weight_prev, tsdf), weight_prev + 1);
+                        int weight_new = min (weight_prev + 1, volume.max_weight);
+
+                        //pack and write
+                        gmem::StCs(pack_tsdf (tsdf_new, weight_new), vptr);
+                    }
                 }  // for(;;)
             }
         };

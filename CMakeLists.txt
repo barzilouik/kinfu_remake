@@ -1,14 +1,14 @@
-#cmake_minimum_required(VERSION 2.8.8)
-#
-## ---[ Configurations types
-#set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "Possible configurations" FORCE)
-#if (DEFINED CMAKE_BUILD_TYPE)
-#  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS ${CMAKE_CONFIGURATION_TYPES})
-#endif()
-#
-## ---[ Solution name
-#project(kfusion C CXX)
-#
+cmake_minimum_required(VERSION 2.8.8)
+
+# ---[ Configurations types
+set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "Possible configurations" FORCE)
+if (DEFINED CMAKE_BUILD_TYPE)
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS ${CMAKE_CONFIGURATION_TYPES})
+endif()
+
+# ---[ Solution name
+project(kfusion C CXX)
+
 # ---[ utility
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/")
 include(cmake/Utils.cmake)
@@ -41,4 +41,4 @@ endif()
 warnings_disable(CMAKE_CXX_FLAGS /wd4985)
 
 add_subdirectory(kfusion)
-#add_subdirectory(apps)
+add_subdirectory(apps)
